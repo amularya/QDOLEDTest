@@ -94,6 +94,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 The executable is written to `build/Release/QDOLEDTextTuner.exe`.
 
+The application manifest is embedded once through `src/QDOLEDTextTuner.rc`. CMake disables Visual Studio's automatically generated manifest for this target to prevent the `CVT1100: duplicate resource (MANIFEST,1)` linker failure.
+
 ## Command line
 
 ```text

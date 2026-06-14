@@ -18,6 +18,12 @@ if(WIN32)
     WINVER=0x0A00 _WIN32_WINNT=0x0A00
   )
   set_source_files_properties(src/QDOLEDTextTuner.manifest PROPERTIES HEADER_FILE_ONLY TRUE)
+  # The custom RT_MANIFEST is already compiled into QDOLEDTextTuner.res. Disable
+  # Visual Studio's generated linker manifest to avoid CVT1100 (MANIFEST,1).
+  set_target_properties(QDOLEDTextTuner PROPERTIES
+    VS_GLOBAL_GenerateManifest "false"
+    VS_GLOBAL_EmbedManifest "false"
+  )
   target_link_libraries(QDOLEDTextTuner PRIVATE comctl32 comdlg32 dwmapi ole32 shell32 uuid)
   if(MSVC)
     target_compile_options(QDOLEDTextTuner PRIVATE /W4 /permissive- /utf-8)

@@ -30,6 +30,15 @@ jobs:
         shell: pwsh
         run: cmake -S . -B build -A x64
 
+      - name: Verify single-manifest configuration
+        shell: pwsh
+        run: |
+          $project = "build/QDOLEDTextTuner.vcxproj"
+          $xml = Get-Content $project -Raw
+          if ($xml -notmatch "<GenerateManifest>false</GenerateManifest>") {
+            throw "Visual Studio manifest generation was not disabled; the custom RT_MANIFEST would conflict with MANIFEST,1"
+          }
+
       - name: Build release executable
         shell: pwsh
         run: |
