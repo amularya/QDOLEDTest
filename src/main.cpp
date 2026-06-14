@@ -1,10 +1,12 @@
+#include <windows.h>
+#include <windowsx.h>
+
 #include <commctrl.h>
 #include <commdlg.h>
 #include <dwmapi.h>
 #include <objbase.h>
 #include <shellapi.h>
 #include <shlobj.h>
-#include <windows.h>
 
 #include <array>
 #include <filesystem>

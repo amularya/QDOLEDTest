@@ -13,19 +13,56 @@ permissions:
 jobs:
   build-windows:
     name: Build Windows x64
-    runs-on: windows-2025
+    runs-on: windows-2022
+    timeout-minutes: 20
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Show tool versions
+        shell: pwsh
+        run: |
+          cmake --version
+          python --version
+
       - name: Configure Visual Studio build
+        shell: pwsh
         run: cmake -S . -B build -A x64
 
+      - name: Verify single-manifest configuration
+        shell: pwsh
+        run: |
+          $project = "build/QDOLEDTextTuner.vcxproj"
+          $xml = Get-Content $project -Raw
+          if ($xml -notmatch "<GenerateManifest>false</GenerateManifest>") {
+            throw "Visual Studio manifest generation was not disabled; the custom RT_MANIFEST would conflict with MANIFEST,1"
+          }
+
       - name: Build release executable
-        run: cmake --build build --config Release --parallel
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel --verbose 2>&1 |
+            Tee-Object -FilePath msbuild.log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Run tests
+        shell: pwsh
         run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Verify Windows executable
+        shell: pwsh
+        run: |
+          $exe = "build/Release/QDOLEDTextTuner.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Expected executable was not produced: $exe"
+          }
+          $header = [System.IO.File]::ReadAllBytes($exe)[0..1]
+          if ($header[0] -ne 0x4d -or $header[1] -ne 0x5a) {
+            throw "Output does not have a Windows PE MZ header"
+          }
 
       - name: Package portable download
         shell: pwsh
@@ -49,6 +86,40 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Summarize compiler failure
+        if: failure()
+        shell: pwsh
+        run: |
+          "## Windows build failure" >> $env:GITHUB_STEP_SUMMARY
+          "The most useful compiler/linker lines are shown below. A full diagnostics artifact is also attached to this run." >> $env:GITHUB_STEP_SUMMARY
+          "```text" >> $env:GITHUB_STEP_SUMMARY
+          if (Test-Path "msbuild.log") {
+            $matches = Select-String -Path "msbuild.log" -Pattern ": error (C|LNK|RC)[0-9]+|fatal error|CMake Error" |
+              Select-Object -First 30 |
+              ForEach-Object { $_.Line.Trim() }
+            if ($matches) {
+              $matches >> $env:GITHUB_STEP_SUMMARY
+            } else {
+              Get-Content "msbuild.log" -Tail 80 >> $env:GITHUB_STEP_SUMMARY
+            }
+          } else {
+            "The build failed before msbuild.log was created. Check the configure step above." >> $env:GITHUB_STEP_SUMMARY
+          }
+          "```" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload Windows build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: QDOLEDTextTuner-build-diagnostics
+          path: |
+            msbuild.log
+            build/CMakeCache.txt
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   release:
     name: Publish tagged release
     if: startsWith(github.ref, 'refs/tags/v')
@@ -56,6 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - name: Download Windows package
         uses: actions/download-artifact@v4
@@ -63,7 +135,7 @@ jobs:
           name: QDOLEDTextTuner-win-x64
           path: dist
 
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
